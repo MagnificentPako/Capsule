@@ -4,6 +4,9 @@ local base = "/.capsule"
 local tempName = fsc(base,"temp-" .. math.random(99999999))
 local storage = fsc(base,"storage")
 
+local ccfs = dofile("/usr/bin/capsule.deps/.glue/dep/ccfs/ccfs.lua")
+local JSON = dofile("/usr/bin/capsule.deps/.glue/dep/json/main.lua")
+
 if(not fs.isDir(base)) then fs.makeDir(base) end
 if(not fs.isDir(storage)) then fs.makeDir(storage) end
 
@@ -67,7 +70,7 @@ elseif(args[1] == "uninstall-capsule-internal") then
   fs.delete("/usr/bin/capsule.deps")
 else
 
-  shell.run("/usr/bin/capsule.deps/.glue/autoload.lua")
+  --shell.run("/usr/bin/capsule.deps/.glue/autoload.lua")
 
   if(args[1] == "init") then --initializes capsule
     local cur
@@ -113,24 +116,41 @@ else
     if(not fs.exists(file)) then file = fs.exists(fsc(storage,args[2])) and fsc(storage,args[2]) or (fs.exists(fsc(storage,args[2]..".capsule")) and fsc(storage,args[2]..".capsule") or error()) end
     local fileName = fs.getName(file)
     print("Starting capsule '"..fileName.."'")
-    if(fs.exists(tempName)) then fs.delete(tempName) end
-    fs.makeDir(tempName)
-    fs.copy(file, fsc(tempName,fileName))
-    fs.makeDir(fsc(tempName, "capsule"))
-    unpack(fsc(tempName, fileName),fsc(tempName, "capsule"))
-    fs.delete(fsc(tempName, fileName))
+    local rfs = ccfs.makeRamFS()
+    local _fs = fs
+    fs = rfs
+    fs.import(file) --import capsule into fs
+    fs.import("usr/bin/glue") --import glue into fs
+    fs.lock()
+    fs.copy(file, fileName)
+
+    local handle = _fs.open("dump","w")
+    handle.write(fs.dump())
+    handle.close()
+
+    print("yay")
+    unpack(fileName,"/")
+    print("nay")
+    fs.delete(fileName)
+    fs.delete(file)
     local oldDir = shell.dir()
-    shell.setDir(fsc(tempName,"capsule"))
+    shell.setDir("/")
     print("Installing dependencies")
-    shell.run("glue install")
-    local handle = fs.open(fsc(fsc(tempName,"capsule"),"capsule.json"),"r")
+    print(fs.exists("src"))
+    --shell.run("usr/bin/glue", "install")
+    local handle = fs.open(fsc("/","capsule.json"),"r")
     local conf = JSON.parse(handle.readAll())
     handle.close()
     shell.run(conf.command)
     print("Capsule stopped.")
     print("cleaning up...")
-    fs.delete(tempName)
     shell.setDir(oldDir)
     print("Done!")
+
+    local handle = _fs.open("dump","w")
+    handle.write(fs.dump())
+    handle.close()
+
+    fs = _fs
   end
 end
