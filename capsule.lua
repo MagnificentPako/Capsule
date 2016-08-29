@@ -1,9 +1,13 @@
 local args = {...}
-local tempName = "/.capsule-temp" .. math.random(99999999)
 local fsc = fs.combine
+local base = "/.capsule"
+local tempName = fsc(base,"temp-" .. math.random(99999999))
+local storage = fsc(base,"storage")
+
+if(not fs.isDir(base)) then fs.makeDir(base) end
+if(not fs.isDir(storage)) then fs.makeDir(storage) end
 
 local function pack(src,out)
-
   local function mapFolder(path)
     local content = {}
     for k,v in pairs(fs.list(fsc(src,path))) do
@@ -23,7 +27,6 @@ local function pack(src,out)
   local handle = fs.open(out,"w")
   handle.write(textutils.serialize(compressed))
   handle.close()
-
 end
 
 local function unpack(input,baseout)
@@ -46,7 +49,6 @@ local function unpack(input,baseout)
   end
 
   reverse(compressed)
-
 end
 
 if(args[1] == "install-capsule-internal") then
@@ -67,7 +69,7 @@ else
 
   shell.run("/usr/bin/capsule.deps/.glue/autoload.lua")
 
-  if(args[1] == "init") then
+  if(args[1] == "init") then --initializes capsule
     local cur
     if(args[2] ~= nil) then
       if(not fs.exists(shell.resolve(args[2]))) then
@@ -86,8 +88,14 @@ else
     handle.write(JSON.stringify(conf):gsub("{","{\n"):gsub(",",",\n"):gsub("}","\n}"))
     handle.close()
     shell.run("glue init",args[2])
-
-  elseif(args[1] == "install") then
+  elseif(args[1] == "install") then --installs capsule into local storage
+    if(args[2] == nil) then error() end
+    local file = shell.resolve(args[2])
+    if(not fs.exists(file) or fs.isDir(file)) then error() end
+    local fileName = fs.getName(file)
+    print("Installing capsule '" .. fileName .. "'")
+    fs.copy(file,fsc(storage,fileName))
+  elseif(args[1] == "compile") then --compiles capsule
     local cur = shell.dir()
     if(not fs.exists(fsc(cur, "capsule.json"))) then error() end
     if(not fs.exists(fsc(cur, "GlueFile"))) then error() end
@@ -98,9 +106,11 @@ else
     fs.delete(fsc(cur,conf.name .. ".capsule"))
     pack(cur,fsc(cur,conf.name .. ".capsule"))
     shell.run("glue install")
-  elseif(args[1] == "run") then
+  elseif(args[1] == "run") then --runs a capsule
     if(args[2] == nil) then error() end
     local file = shell.resolve(args[2])
+    if(not fs.exists(file)) then file = file..".capsule" end
+    if(not fs.exists(file)) then file = fs.exists(fsc(storage,args[2])) and fsc(storage,args[2]) or (fs.exists(fsc(storage,args[2]..".capsule")) and fsc(storage,args[2]..".capsule") or error()) end
     local fileName = fs.getName(file)
     print("Starting capsule '"..fileName.."'")
     if(fs.exists(tempName)) then fs.delete(tempName) end
@@ -122,6 +132,5 @@ else
     fs.delete(tempName)
     shell.setDir(oldDir)
     print("Done!")
-end
-
+  end
 end
